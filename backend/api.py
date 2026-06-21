@@ -9,10 +9,11 @@ load_dotenv()
 from typing import Optional
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 from docx import Document
 from sqlalchemy.orm import Session
+from starlette.types import ASGIApp, Scope, Receive, Send
 
 from database import engine, get_db
 from models import Base, User, ResumeHistory
@@ -33,12 +34,42 @@ ALLOWED_EXTENSIONS = (".pdf", ".docx")
 
 app = FastAPI(title="Resume Customizer API")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
+@app.options("/{path:path}")
+async def options_route(path: str):
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Max-Age": "600",
+        },
+    )
+
+
+class CORSASGIMiddleware:
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                headers = dict(message.get("headers", []))
+                headers[b"access-control-allow-origin"] = b"*"
+                headers[b"access-control-allow-methods"] = b"*"
+                headers[b"access-control-allow-headers"] = b"*"
+                message["headers"] = [(k, v) for k, v in headers.items()]
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
+
+
+app.add_middleware(CORSASGIMiddleware)
 
 
 @app.get("/api/health")

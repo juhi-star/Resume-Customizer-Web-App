@@ -1,6 +1,9 @@
 import { CustomizeResponse, AuthResponse, HistoryListItem, HistoryItem, CustomizedResume } from './types';
 
-const BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+const PROD_API = 'https://resume-customizer-api.onrender.com';
+const BASE = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+  ? 'http://localhost:8000'
+  : PROD_API;
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
